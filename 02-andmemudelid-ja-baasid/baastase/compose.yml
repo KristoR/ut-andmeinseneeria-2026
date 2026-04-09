@@ -13,11 +13,12 @@ services:
     volumes:
       - ./data:/data
       - ./scripts:/scripts
-      - pgdata:/var/lib/postgresql
+      - pgdata_02_base:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       retries: 5
 
 volumes:
-  pgdata:
+  pgdata_02_base:
+    name: praktikum-db-02-base-pgdata

@@ -99,6 +99,8 @@ def count_intermediate_rows(conn):
         cur.execute("SELECT COUNT(*) FROM intermediate.user_profile_enriched;")
         return cur.fetchone()[0]
 
+def load_final_rows_from_intermediate(conn):
+    """Laadimine analytics kihti: lae lõpptabel `intermediate` vaatest.
 
 def load_final_rows_from_intermediate(conn):
     """Laadimine analytics kihti: lae lõpptabel intermediate vaatest."""
@@ -132,6 +134,8 @@ def load_final_rows_from_intermediate(conn):
             ORDER BY user_id;
             """
         )
+
+        # `rowcount` ütleb, mitu rida eelmine SQL-käsk mõjutas.
         inserted_rows = cur.rowcount
 
     conn.commit()
@@ -139,13 +143,27 @@ def load_final_rows_from_intermediate(conn):
 
 
 def main():
-    """Käivita kogu töövoog õiges järjekorras."""
+    """Käivita kogu töövoog õiges järjekorras.
 
+    `main()` on selle faili põhitöövoog.
+    Siin kutsume eelnevad funktsioonid ükshaaval välja ja prindime
+    iga etapi järel lühikese vahekokkuvõtte.
+    """
+
+    # Siit algab kogu skripti peamine muutujate teekond:
+    # get_connection() -> conn
+    # fetch_api_users() -> api_users
+    # count_intermediate_rows(conn) -> intermediate_rows
+    # load_final_rows_from_intermediate(conn) -> inserted_rows
     conn = get_connection()
 
+    # `try/finally` tähendab: proovi töö ära teha ja sule ühendus igal juhul.
     try:
         print("ETL etapp 1/3: Andmete vastuvõtt ja laadimine staging kihti")
         api_users = fetch_api_users()
+
+        # `f"..."` on f-string.
+        # See lubab panna muutuja väärtuse otse teksti sisse.
         print(f"- API-st tuli {len(api_users)} kasutajat.")
         load_api_users(conn, api_users)
         print(f"- Laadisin staging.api_users tabelisse {len(api_users)} rida.")
@@ -168,5 +186,6 @@ def main():
         conn.close()
 
 
+# See plokk käivitab `main()` ainult siis, kui paneme selle faili otse jooksma.
 if __name__ == "__main__":
     main()

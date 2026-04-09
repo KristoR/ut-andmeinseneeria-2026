@@ -1,0 +1,24 @@
+version: 2
+
+models:
+  - name: obt_daily_weather
+    description: "OBT (One Big Table): päevane ilm koos riigi metaandmetega ühes laias tabelis"
+    columns:
+      - name: observation_date
+        tests:
+          - not_null
+      - name: city_name
+        tests:
+          - not_null
+      - name: country_code
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_countries')
+              field: country_code
+      - name: temp_max_c
+        tests:
+          - not_null
+      - name: temp_min_c
+        tests:
+          - not_null

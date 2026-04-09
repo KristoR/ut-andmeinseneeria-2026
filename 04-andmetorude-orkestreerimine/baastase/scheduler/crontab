@@ -1,0 +1,10 @@
+# SHELL ütleb, millise shelliga cron käsud käivitab.
+SHELL=/bin/bash
+# PATH ütleb, kust süsteem programme otsib.
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# CRON_TZ hoiab ajastuse Tallinna ajas, sõltumata konteineri vaikeseadetest.
+CRON_TZ=Europe/Tallinn
+
+# Iga 5 minuti tagant käivita päeva vaikeloogika
+# ja kirjuta kogu väljund logifaili.
+*/5 * * * * cd /app && /usr/local/bin/python /app/scripts/orchestrate.py run-scheduled >> /var/log/praktikum/pipeline.log 2>&1

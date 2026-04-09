@@ -1,0 +1,19 @@
+FROM python:3.13-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    TZ=Europe/Tallinn
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends bash cron postgresql-client procps tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY scripts/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+COPY scheduler/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

@@ -1,0 +1,12 @@
+praktikum_dbt:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('POSTGRES_HOST', 'analytics-db') }}"
+      port: 5432
+      user: "{{ env_var('POSTGRES_USER', 'praktikum') }}"
+      pass: "{{ env_var('POSTGRES_PASSWORD', 'praktikum') }}"
+      dbname: "{{ env_var('POSTGRES_DB', 'praktikum') }}"
+      schema: public
+      threads: 2

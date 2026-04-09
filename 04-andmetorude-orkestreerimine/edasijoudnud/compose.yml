@@ -1,0 +1,205 @@
+# Airflow 3 + dbt + PostgreSQL keskkond praktikumi jaoks
+#
+# Põhineb Apache Airflow 3.1.8 ametlikul compose.yml failil.
+# Lihtsustatud: LocalExecutor (Redis ja Celery worker eemaldatud).
+#
+# Käivitamine:
+#   cp .env.example .env
+#   docker compose up -d --build
+
+x-airflow-common:
+  &airflow-common
+  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.1.8}
+  env_file:
+    - ${ENV_FILE_PATH:-.env}
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_USER:-airflow}:${AIRFLOW_PASSWORD:-airflow}@airflow-db:5432/${AIRFLOW_DB:-airflow}
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080/execution/'
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET:-airflow_jwt_secret}
+    AIRFLOW__API_AUTH__JWT_ISSUER: ${AIRFLOW__API_AUTH__JWT_ISSUER:-airflow}
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    # Rakenduse andmebaasi ühendus — kasutatav DAG-ides PostgresHook kaudu
+    AIRFLOW_CONN_ANALYTICS_DB: postgresql://${POSTGRES_USER:-praktikum}:${POSTGRES_PASSWORD:-praktikum}@analytics-db:5432/${POSTGRES_DB:-praktikum}
+    # dbt ühenduseparameetrid (dbt profiles.yml kasutab neid)
+    POSTGRES_HOST: analytics-db
+    POSTGRES_PORT: "5432"
+    POSTGRES_USER: ${POSTGRES_USER:-praktikum}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-praktikum}
+    POSTGRES_DB: ${POSTGRES_DB:-praktikum}
+    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-dbt-postgres==1.10.0}
+    AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
+  volumes:
+    - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
+    - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
+    - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
+    - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+    - ${AIRFLOW_PROJ_DIR:-.}/dbt_project:/opt/airflow/dbt_project
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    &airflow-common-depends-on
+    airflow-db:
+      condition: service_healthy
+    analytics-db:
+      condition: service_healthy
+
+services:
+  # --- Airflow metaandmebaas ---
+  airflow-db:
+    image: postgres:16
+    container_name: praktikum-airflow-db-04
+    environment:
+      POSTGRES_USER: ${AIRFLOW_USER:-airflow}
+      POSTGRES_PASSWORD: ${AIRFLOW_PASSWORD:-airflow}
+      POSTGRES_DB: ${AIRFLOW_DB:-airflow}
+    volumes:
+      - airflow-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${AIRFLOW_USER:-airflow}"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+
+  # --- Analüütika andmebaas (ilmaandmed, riigid, kursid) ---
+  analytics-db:
+    image: pgduckdb/pgduckdb:18-v1.1.1
+    container_name: praktikum-analytics-db-04
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-praktikum}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-praktikum}
+      POSTGRES_DB: ${POSTGRES_DB:-praktikum}
+    ports:
+      - "5433:5432"
+    volumes:
+      - analytics-db-volume:/var/lib/postgresql
+      - ./sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-praktikum}"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+
+  # --- dbt Core transformatsioonide jaoks ---
+  dbt:
+    build:
+      context: .
+      dockerfile: Dockerfile.dbt
+    container_name: praktikum-dbt-04
+    environment:
+      POSTGRES_HOST: analytics-db
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-praktikum}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-praktikum}
+      POSTGRES_DB: ${POSTGRES_DB:-praktikum}
+    env_file:
+      - .env
+    depends_on:
+      analytics-db:
+        condition: service_healthy
+    volumes:
+      - ./dbt_project:/dbt
+    working_dir: /dbt
+    tty: true
+    ports:
+      - 18080:8080
+
+  # --- Airflow API server (UI + REST API) ---
+  airflow-apiserver:
+    <<: *airflow-common
+    command: api-server
+    container_name: praktikum-airflow-api-04
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # --- Airflow scheduler ---
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    container_name: praktikum-airflow-scheduler-04
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # --- Airflow DAG processor ---
+  airflow-dag-processor:
+    <<: *airflow-common
+    command: dag-processor
+    container_name: praktikum-airflow-dagproc-04
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # --- Airflow esmane seadistus (andmebaasi migratsioon + admin kasutaja) ---
+  airflow-init:
+    <<: *airflow-common
+    container_name: praktikum-airflow-init-04
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        if [[ -z "${AIRFLOW_UID}" ]]; then
+          echo
+          echo -e "\033[1;33mWARNING: AIRFLOW_UID not set!\e[0m"
+          echo "If you are on Linux, set AIRFLOW_UID environment variable."
+          echo
+          export AIRFLOW_UID=$$(id -u)
+        fi
+        echo
+        echo "Creating missing opt dirs if missing:"
+        mkdir -v -p /opt/airflow/{logs,dags,plugins,config}
+        echo
+        echo "Airflow version:"
+        /entrypoint airflow version
+        echo
+        echo "Running airflow config list to create default config file if missing."
+        /entrypoint airflow config list >/dev/null
+        echo
+        echo "Change ownership of files in /opt/airflow to ${AIRFLOW_UID}:0"
+        chown -R "${AIRFLOW_UID}:0" /opt/airflow/
+        chown -v -R "${AIRFLOW_UID}:0" /opt/airflow/{logs,dags,plugins,config}
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+      _PIP_ADDITIONAL_REQUIREMENTS: ''
+    user: "0:0"
+
+volumes:
+  airflow-db-volume:
+  analytics-db-volume:

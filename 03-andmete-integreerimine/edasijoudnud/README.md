@@ -501,7 +501,7 @@ Loo fail `models/marts/post_activity_daily.sql`, mis arvutab iga kasutaja postit
 ### Nõuded
 
 - **Materialiseerimine:** `incremental`
-- **Komposiitne unique_key:** `['user_key', 'load_date']` — üks rida iga kasutaja + päev kombinatsiooni kohta
+- **Unikaalne liitvõti (unique composite key):** `['user_key', 'load_date']` — üks rida iga kasutaja + päev kombinatsiooni kohta
 - **Veerud:**
   - `user_key` — kasutaja UUID
   - `load_date` — postituste laadimise kuupäev (DATE, mitte TIMESTAMP)
@@ -513,7 +513,7 @@ Loo fail `models/marts/post_activity_daily.sql`, mis arvutab iga kasutaja postit
 ### Vihjed
 
 - `loaded_at::DATE` teisendab ajatempli kuupäevaks
-- Komposiitne unique_key: `unique_key=['user_key', 'load_date']`
+- Unikaalne liitvõti: `unique_key=['user_key', 'load_date']`
 - Kasuta `int_posts` ja `int_users` mudeleid (`ref()` kaudu)
 - `ROUND(AVG(LENGTH(p.body)))` ümardab keskmise täisarvuks
 
@@ -543,7 +543,11 @@ Loo fail `models/marts/post_activity_daily.sql`, mis arvutab iga kasutaja postit
 
 - Mis juhtub, kui `loaded_at` on alati `NOW()`? Vihje: iga käivitamine tekitab "uued" read.
 - Kuidas käsitleksid hilinevaid andmeid (andmed, mis saabuvad hiljem, aga kuuluvad varasemasse perioodi)?
-- Mis on komposiitse ja ühe veeru unique_key erinevus?
+- Mis on liitvõtme ja ühe veeru põhise võtme unikaalsuse (unique_key) erinevus?
+
+### Näidislahendus
+
+`ylesanne1_post_activity_daily.sql`
 
 ---
 
@@ -594,6 +598,12 @@ docker compose exec dbt dbt test --select fct_posts
 - Millal peaks test andma hoiatuse (WARN) ja millal vea (FAIL)?
 - Kuidas käsitleksid testide ebaõnnestumist tootmiskeskkonnas?
 - Miks on mõttekas testida marts kihis, mitte ainult staging kihis?
+
+### Näidislahendus
+
+`ylesanne2_assert_no_orphan_posts.sql`  
+ja
+`ylesanne2_schema.yml___` (asenda samas kaustas oleva `schema.yml`-ga)
 
 ---
 
@@ -646,6 +656,10 @@ Kasutajad, kelle aadressi demo ajal muutsime, peaksid näitama nii `current_city
 - Miks on see muster (dimensioon + meetrikad + ajalugu) ärianalüüsis nii levinud?
 - Mis juhtub, kui snapshot-tabel kustutatakse ja luuakse uuesti? Mida kaotame?
 - Kas see raport peaks olema `view` või `table`? Mis on kompromissid?
+
+### Näidislahendus
+
+`ylesanne3_user_activity_report.sql` 
 
 ---
 

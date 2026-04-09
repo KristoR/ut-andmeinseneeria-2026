@@ -1,0 +1,9 @@
+.env
+logs/
+config/
+plugins/
+__pycache__/
+*.pyc
+dbt_project/target/
+dbt_project/logs/
+dbt_project/dbt_packages/

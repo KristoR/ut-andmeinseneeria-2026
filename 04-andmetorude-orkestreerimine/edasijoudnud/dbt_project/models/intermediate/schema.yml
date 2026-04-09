@@ -1,0 +1,26 @@
+version: 2
+
+models:
+  - name: int_weather
+    description: "Puhastatud ilmaandmed"
+    columns:
+      - name: country_code
+        tests:
+          - not_null
+      - name: observation_date
+        tests:
+          - not_null
+      - name: temp_max_c
+        tests:
+          - not_null
+
+  - name: int_countries
+    description: "Puhastatud riikide metaandmed"
+    columns:
+      - name: country_code
+        tests:
+          - unique
+          - not_null
+      - name: country_name
+        tests:
+          - not_null

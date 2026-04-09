@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: staging
+    schema: staging
+    tables:
+      - name: weather_raw
+        description: "Ilmaandmete toorandmed Open-Meteo Archive API-st"
+      - name: countries_raw
+        description: "Riikide metaandmed REST Countries API-st"
+      - name: iss_weather_raw
+        description: "ISS hetkeilma toorandmed (ISS API + Open-Meteo)"

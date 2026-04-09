@@ -1,0 +1,48 @@
+# LAHENDUS: Ulesanne 2A - Laiendatud schema testid
+# See fail asendab models/marts/schema.yml sisu
+
+version: 2
+
+models:
+  - name: dim_users
+    description: "Kasutajate dimensioonitabel"
+    columns:
+      - name: user_key
+        description: "Kasutaja unikaalne tunnusvoti (UUID)"
+        tests:
+          - unique
+          - not_null
+      - name: user_id
+        tests:
+          - unique
+          - not_null
+      - name: email
+        tests:
+          - not_null
+
+  - name: fct_posts
+    description: "Postituste faktitabel kasutajadimensiooniga"
+    columns:
+      - name: post_id
+        description: "Postituse unikaalne tunnus"
+        tests:
+          - unique
+          - not_null
+      - name: user_key
+        description: "Viide kasutajadimensioonile"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_users')
+              field: user_key
+      - name: body_length
+        tests:
+          - not_null
+
+  - name: user_post_summary
+    description: "Kasutajate postituste kokkuvote (inkrementaalne)"
+    columns:
+      - name: user_key
+        tests:
+          - unique
+          - not_null

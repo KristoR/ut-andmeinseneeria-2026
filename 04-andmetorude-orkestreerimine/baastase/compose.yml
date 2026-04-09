@@ -1,0 +1,71 @@
+# Käivitamine:
+#   cp .env.example .env
+#   docker compose up -d --build
+
+services:
+  db:
+    image: pgduckdb/pgduckdb:18-v1.1.1
+    container_name: praktikum-db-04-base
+    env_file:
+      - .env
+    ports:
+      - "${DB_PORT_HOST:-5435}:5432"
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d
+      - pgdata_04_base:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-praktikum} -d ${POSTGRES_DB:-praktikum}"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+
+  source-api:
+    image: python:3.13-slim
+    container_name: praktikum-source-api-04-base
+    env_file:
+      - .env
+    environment:
+      PORT: "${SOURCE_API_PORT:-8014}"
+    working_dir: /app
+    volumes:
+      - ./source_api:/app/source_api
+    command: ["python", "/app/source_api/server.py"]
+    ports:
+      - "${SOURCE_API_PORT_HOST:-8014}:${SOURCE_API_PORT:-8014}"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:${SOURCE_API_PORT:-8014}/health', timeout=5).read()\"",
+        ]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.scheduler
+    container_name: praktikum-scheduler-04-base
+    env_file:
+      - .env
+    working_dir: /app
+    depends_on:
+      db:
+        condition: service_healthy
+      source-api:
+        condition: service_healthy
+    volumes:
+      - ./scripts:/app/scripts
+      - ./source_data:/app/source_data
+      - ./scheduler:/app/scheduler
+      - ./logs:/var/log/praktikum
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep cron >/dev/null"]
+      interval: 10s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  pgdata_04_base:
+    name: praktikum-db-04-base-pgdata
